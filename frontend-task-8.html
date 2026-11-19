@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Task 8: Advanced DOM Applications</title>
+<style>
+  :root {
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    --bg: #f3f1ec; --surface: #ffffff; --text: #1d2327; --muted: #667075;
+    --line: #d8d4c9; --accent: #2f6f5e; --accent-text: #ffffff; --done: #8b9396;
+    --light-sq: #ecd9b0; --dark-sq: #a8744a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #16191b; --surface: #20252a; --text: #e8e6e1; --muted: #9aa3a7;
+      --line: #343b41; --accent: #5fb89f; --accent-text: #0f1a16; --done: #6f787c;
+      --light-sq: #d9c498; --dark-sq: #8a5d3b; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #16191b; --surface: #20252a; --text: #e8e6e1; --muted: #9aa3a7;
+    --line: #343b41; --accent: #5fb89f; --accent-text: #0f1a16; --done: #6f787c;
+    --light-sq: #d9c498; --dark-sq: #8a5d3b; color-scheme: dark;
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 Georgia, "Times New Roman", serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 28px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.2rem; margin: 0 0 12px; }
+  p.lead { margin: 0; color: var(--muted); }
+  section { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+  button, input { font: inherit; }
+  .add { display: flex; gap: 8px; margin-bottom: 12px; }
+  .add input[type="text"] {
+    flex: 1; min-width: 0; padding: 9px 12px; border: 1px solid var(--line);
+    border-radius: 6px; background: var(--bg); color: var(--text);
+  }
+  button {
+    border: 1px solid var(--line); background: var(--bg); color: var(--text);
+    border-radius: 6px; padding: 7px 11px; cursor: pointer;
+  }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button:disabled { opacity: .35; cursor: not-allowed; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #todo-list { list-style: none; margin: 0; padding: 0; }
+  #todo-list li {
+    display: flex; align-items: center; gap: 10px; padding: 9px 4px;
+    border-bottom: 1px solid var(--line);
+  }
+  #todo-list li:last-child { border-bottom: 0; }
+  #todo-list input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
+  .label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  li.done .label { text-decoration: line-through; color: var(--done); }
+  .tools { display: flex; gap: 4px; flex: none; }
+  .tools button { padding: 5px 9px; min-width: 34px; }
+  .meta { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; color: var(--muted); font-size: .9rem; }
+  .empty { color: var(--muted); padding: 10px 4px; }
+  .board-wrap { overflow-x: auto; }
+  #chessboard { margin: 0 auto; border: 3px solid var(--dark-sq); }
+  .sq-info { margin-top: 10px; color: var(--muted); text-align: center; min-height: 1.5em; }
+  .topbar { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="topbar">
+    <div>
+      <h1>Advanced DOM applications</h1>
+      <p class="lead">A To-Do list with reordering and checkboxes, and a chessboard built entirely in JavaScript.</p>
+    </div>
+    <button id="theme" type="button" aria-label="Switch colour theme">Theme</button>
+  </div>
+
+  <section aria-labelledby="todo-h">
+    <h2 id="todo-h">To-Do list</h2>
+    <div class="add">
+      <input type="text" id="todo-input" placeholder="Add a task" aria-label="New task" maxlength="120">
+      <button type="button" id="add-btn" class="primary">Add task</button>
+    </div>
+    <ul id="todo-list"></ul>
+    <div class="meta">
+      <span id="count"></span>
+      <button type="button" id="clear-done">Remove completed</button>
+    </div>
+  </section>
+
+  <section aria-labelledby="chess-h">
+    <h2 id="chess-h">Chessboard</h2>
+    <div class="board-wrap"><div id="chessboard" role="grid" aria-label="Chessboard"></div></div>
+    <div class="sq-info" id="sq-info" aria-live="polite">Select a square to see its name.</div>
+  </section>
+</main>
+
+<script>
+/* ---------- To-Do list ---------- */
+const list = document.getElementById('todo-list');
+const input = document.getElementById('todo-input');
+const countEl = document.getElementById('count');
+
+function createTask(text, done) {
+  const li = document.createElement('li');
+  if (done) li.classList.add('done');
+
+  const cb = document.createElement('input');
+  cb.type = 'checkbox';
+  cb.checked = !!done;
+  cb.setAttribute('aria-label', 'Mark task complete');
+  cb.addEventListener('change', () => {
+    li.classList.toggle('done', cb.checked);
+    refresh();
+  });
+
+  const label = document.createElement('span');
+  label.className = 'label';
+  label.textContent = text;
+
+  const tools = document.createElement('div');
+  tools.className = 'tools';
+
+  const up = document.createElement('button');
+  up.type = 'button'; up.textContent = '↑'; up.className = 'up';
+  up.setAttribute('aria-label', 'Move task up');
+  up.addEventListener('click', () => {
+    const prev = li.previousElementSibling;
+    if (prev) list.insertBefore(li, prev);
+    refresh();
+  });
+
+  const down = document.createElement('button');
+  down.type = 'button'; down.textContent = '↓'; down.className = 'down';
+  down.setAttribute('aria-label', 'Move task down');
+  down.addEventListener('click', () => {
+    const next = li.nextElementSibling;
+    if (next) list.insertBefore(next, li);
+    refresh();
+  });
+
+  const del = document.createElement('button');
+  del.type = 'button'; del.textContent = '✕';
+  del.setAttribute('aria-label', 'Delete task');
+  del.addEventListener('click', () => { li.remove(); refresh(); });
+
+  tools.append(up, down, del);
+  li.append(cb, label, tools);
+  return li;
+}
+
+function refresh() {
+  const items = list.querySelectorAll('li');
+  items.forEach((li, i) => {
+    li.querySelector('.up').disabled = i === 0;
+    li.querySelector('.down').disabled = i === items.length - 1;
+  });
+  const done = list.querySelectorAll('li.done').length;
+  countEl.textContent = items.length
+    ? done + ' of ' + items.length + ' completed'
+    : 'No tasks yet. Add one above.';
+}
+
+function addTask() {
+  const text = input.value.trim();
+  if (!text) { input.focus(); return; }
+  list.appendChild(createTask(text, false));
+  input.value = '';
+  input.focus();
+  refresh();
+}
+
+document.getElementById('add-btn').addEventListener('click', addTask);
+input.addEventListener('keydown', e => { if (e.key === 'Enter') addTask(); });
+document.getElementById('clear-done').addEventListener('click', () => {
+  list.querySelectorAll('li.done').forEach(li => li.remove());
+  refresh();
+});
+
+['Read the DOM chapter', 'Build the To-Do list', 'Generate the chessboard'].forEach((t, i) =>
+  list.appendChild(createTask(t, i === 0)));
+refresh();
+
+/* ---------- Chessboard (nested loops + programmatic CSS) ---------- */
+const board = document.getElementById('chessboard');
+const info = document.getElementById('sq-info');
+const SIZE = 8;
+const FILES = 'abcdefgh';
+let selected = null;
+
+// Board styling is applied from JavaScript, not from a stylesheet.
+const cell = Math.max(34, Math.min(64, Math.floor((Math.min(window.innerWidth, 860) - 80) / SIZE)));
+board.style.display = 'grid';
+board.style.gridTemplateColumns = 'repeat(' + SIZE + ', ' + cell + 'px)';
+board.style.gridTemplateRows = 'repeat(' + SIZE + ', ' + cell + 'px)';
+board.style.width = 'fit-content';
+
+for (let row = 0; row < SIZE; row++) {
+  for (let col = 0; col < SIZE; col++) {
+    const sq = document.createElement('div');
+    const isLight = (row + col) % 2 === 0;
+    const name = FILES[col] + (SIZE - row);
+
+    sq.style.backgroundColor = isLight ? 'var(--light-sq)' : 'var(--dark-sq)';
+    sq.style.display = 'flex';
+    sq.style.alignItems = 'flex-end';
+    sq.style.justifyContent = 'flex-end';
+    sq.style.padding = '2px 4px';
+    sq.style.fontSize = '11px';
+    sq.style.fontFamily = 'system-ui, sans-serif';
+    sq.style.color = isLight ? '#6b4a2f' : '#f0e2c4';
+    sq.style.cursor = 'pointer';
+    sq.style.userSelect = 'none';
+
+    sq.setAttribute('role', 'gridcell');
+    sq.setAttribute('aria-label', name + (isLight ? ', light square' : ', dark square'));
+    sq.dataset.square = name;
+    sq.dataset.light = isLight;
+    if (row === SIZE - 1 || col === 0) {
+      // coordinate labels along the bottom and left edges
+      sq.textContent = row === SIZE - 1 && col === 0 ? name : (row === SIZE - 1 ? FILES[col] : SIZE - row);
+    }
+
+    sq.addEventListener('click', () => {
+      if (selected) {
+        selected.style.outline = 'none';
+        selected.style.boxShadow = 'none';
+      }
+      selected = sq;
+      sq.style.boxShadow = 'inset 0 0 0 4px #e0b43a';
+      info.textContent = 'Square ' + name + ' (' + (isLight ? 'light' : 'dark') + ')';
+    });
+
+    board.appendChild(sq);
+  }
+}
+
+/* ---------- Theme toggle ---------- */
+document.getElementById('theme').addEventListener('click', () => {
+  const root = document.documentElement;
+  const isDark = root.dataset.theme
+    ? root.dataset.theme === 'dark'
+    : matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = isDark ? 'light' : 'dark';
+});
+</script>
+</body>
+</html>
